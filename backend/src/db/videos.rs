@@ -11,19 +11,17 @@ pub async fn create(
     size_bytes: i64,
     mime_type: &str,
 ) -> Result<Video> {
-    let video = sqlx::query_as!(
-        Video,
+    let video = sqlx::query_as::<_, Video>(
         r#"
         INSERT INTO videos (slug, status, original_path, size_bytes, mime_type)
         VALUES ($1, 'Pending', $2, $3, $4)
-        RETURNING id, slug, status as "status: VideoStatus",
-                  original_path, hls_path, size_bytes, mime_type, created_at
+        RETURNING id, slug, status, original_path, hls_path, size_bytes, mime_type, created_at
         "#,
-        slug,
-        original_path,
-        size_bytes,
-        mime_type,
     )
+    .bind(slug)
+    .bind(original_path)
+    .bind(size_bytes)
+    .bind(mime_type)
     .fetch_one(pool)
     .await
     .context("Failed to insert video record")?;
@@ -33,16 +31,14 @@ pub async fn create(
 
 /// Fetch a video by its public slug.
 pub async fn get_by_slug(pool: &PgPool, slug: &str) -> Result<Video> {
-    let video = sqlx::query_as!(
-        Video,
+    let video = sqlx::query_as::<_, Video>(
         r#"
-        SELECT id, slug, status as "status: VideoStatus",
-               original_path, hls_path, size_bytes, mime_type, created_at
+        SELECT id, slug, status, original_path, hls_path, size_bytes, mime_type, created_at
         FROM videos
         WHERE slug = $1
         "#,
-        slug
     )
+    .bind(slug)
     .fetch_one(pool)
     .await
     .context(format!("Video not found with slug: {}", slug))?;
@@ -52,16 +48,14 @@ pub async fn get_by_slug(pool: &PgPool, slug: &str) -> Result<Video> {
 
 /// Fetch a video by its internal UUID.
 pub async fn get_by_id(pool: &PgPool, id: Uuid) -> Result<Video> {
-    let video = sqlx::query_as!(
-        Video,
+    let video = sqlx::query_as::<_, Video>(
         r#"
-        SELECT id, slug, status as "status: VideoStatus",
-               original_path, hls_path, size_bytes, mime_type, created_at
+        SELECT id, slug, status, original_path, hls_path, size_bytes, mime_type, created_at
         FROM videos
         WHERE id = $1
         "#,
-        id
     )
+    .bind(id)
     .fetch_one(pool)
     .await
     .context(format!("Video not found with id: {}", id))?;
@@ -76,16 +70,16 @@ pub async fn update_status(
     status: VideoStatus,
     hls_path: Option<String>,
 ) -> Result<()> {
-    sqlx::query!(
+    sqlx::query(
         r#"
         UPDATE videos
         SET status = $1, hls_path = $2
         WHERE id = $3
         "#,
-        status as VideoStatus,
-        hls_path,
-        id
     )
+    .bind(status.to_string())
+    .bind(hls_path)
+    .bind(id)
     .execute(pool)
     .await
     .context(format!("Failed to update status for video: {}", id))?;
