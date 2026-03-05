@@ -1,3 +1,9 @@
 target/
 storage/
 .env
+
+# zip files
+*.zip
+
+# root package-lock (dependencies are in frontend/)
+package-lock.json
