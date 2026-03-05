@@ -53,6 +53,7 @@ async fn transcode(input_path: &str, output_dir: &str) -> Result<()> {
 
     // run ffmpeg
     let status = Command::new("ffmpeg")
+        .arg("-loglevel").arg("error")
         .args([
             "-i", input_path,       // input file
             "-codec:", "copy",      // copy video/audio as-is (fast, no re-encoding)
