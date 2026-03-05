@@ -15,6 +15,7 @@ mod services;
 pub struct AppState {
     pub db: sqlx::PgPool,
     pub storage: Arc<dyn storage::StorageBackend>,
+    pub transcode_semaphore: Arc<tokio::sync::Semaphore>,
 }
 
 #[tokio::main]
@@ -51,9 +52,15 @@ async fn main() {
     &format!("http://localhost:{}", port),
 );
 
+    let max_transcode_jobs = env::var("MAX_TRANSCODING_JOBS")
+        .unwrap_or_else(|_| "2".to_string())
+        .parse::<usize>()
+        .expect("MAX_TRANSCODING_JOBS must be a number");
+
     let state = AppState {
         db: pool,
         storage: Arc::new(storage),
+        transcode_semaphore: Arc::new(tokio::sync::Semaphore::new(max_transcode_jobs)),
     };
 
     let app = Router::new()

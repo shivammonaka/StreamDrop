@@ -41,7 +41,6 @@ pub async fn upload(
 ) -> impl IntoResponse {
 
     let slug = nanoid!(8);
-    let mut filename = String::from("video.mp4");
     let mut saved_path = String::new();
     let mut total_bytes: u64 = 0;
     let mut mime_type = String::from("video/mp4");
@@ -58,7 +57,7 @@ pub async fn upload(
 
     // stream file to disk chunk by chunk — never loads full file into RAM
     while let Ok(Some(field)) = multipart.next_field().await {
-        filename = field.file_name()
+        let filename = field.file_name()
             .unwrap_or("video.mp4")
             .to_string();
 
@@ -74,7 +73,7 @@ pub async fn upload(
             ).into_response();
         }
 
-        saved_path = format!("{}/{}", upload_dir, filename);
+        saved_path = format!("{}/{}-{}", upload_dir, slug, filename);
 
         let mut file = match tokio::fs::File::create(&saved_path).await {
             Ok(f) => f,
@@ -130,12 +129,17 @@ pub async fn upload(
         }
     };
 
-    // trigger transcoding in background, dont wait for it
+    // trigger transcoding in background
+    // semaphore limits concurrent ffmpeg processes to MAX_TRANSCODING_JOBS
     let db_pool = state.db.clone();
     let video_id = video.id;
     let saved_path_clone = saved_path.clone();
     let hls_path = state.storage.hls_output_path(&slug);
+    let semaphore = state.transcode_semaphore.clone();
     tokio::spawn(async move {
+        // wait for a slot to be available
+        let _permit = semaphore.acquire_owned().await.unwrap();
+        // _permit dropped at end of block → releases slot for next job
         transcode::run(video_id, &saved_path_clone, &hls_path, &db_pool).await;
     });
 
